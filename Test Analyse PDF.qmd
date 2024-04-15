@@ -1,0 +1,1547 @@
+---
+title: "Analyse CHAMPIONNAT DE FRANCE NOVICE HOMME SHORT PROGRAM "
+format:
+  pdf:
+    toc: true
+    number-sections: true
+    colorlinks: true
+editor: visual
+---
+
+```{r}
+#| include: false
+#| label : Import et tri des données
+##################################################
+##               PACKAGE                        ##
+##################################################
+library(ggplot2)
+library(tidyverse)
+library(gtsummary)
+library(dplyr)
+library(gridExtra)
+library(tidyr)
+library(tinytex)
+library(DT)
+library(patchwork)
+##################################################
+##               IMPORTATION DONNEE             ##
+##################################################
+
+data <- read.csv("FICHIER_ANALYSE.csv")
+#View(data)
+data <- as.data.frame(data)
+#dim(data)
+
+##################################################
+##               TRAITEMENT DONNEE             ##
+##################################################
+juge <- names(data)[startsWith(names(data), "J")]
+
+# Compter le nombre de colonnes trouvées
+len_juge <- length(juge)
+len_juge
+# Afficher le nombre de colonnes qui commencent par "J"
+
+for (i in 1:nrow(data)) {
+  if (!is.na(data[i, "base_value"]) && data[i, "base_value"] == 0) {
+    for (col in juge){data[i,col] <- 0
+  }
+}}
+
+
+
+
+```
+
+Score final associé pour chaque juge.
+
+```{r}
+#| echo: false
+#| warning: false
+#| label: Matrice GOE & Compo
+
+
+data$Moyenne <- 0
+for (i in 1:nrow(data)) {
+  if (data$Numéro[i] != "Total") {
+    
+    data$Moyenne[i] <- sum(as.numeric( data[i, startsWith(names(data), "J")]))/length(juge)
+  }
+}
+##################################################
+##               MATRICE  COMPO                 ##
+##################################################
+row_m_compo<-0
+for (i in 1:nrow(data)){
+  if (data[i,"Elements"]=="Composition" | data[i,"Elements"]=="Presentation" | data[i,"Elements"]=="Skating Skills"){
+    row_m_compo<-row_m_compo+1    
+  }
+}
+row_m_compo<-row_m_compo
+#row_m_compo
+m_compo<-matrix(0,nrow=row_m_compo,(len_juge+4))#parce que je veux les skater et le geo factor en plus
+
+
+m_compo<-as.data.frame(m_compo)
+
+
+cols<-c("GEO...FACTOR","Elements",juge,"Player_ID","Moyenne")
+
+c=1
+for (i in 1:nrow(data)){
+  if (data[i,"Elements"]=="Composition" | data[i,"Elements"]=="Presentation" | data[i,"Elements"]=="Skating Skills"){
+    m_compo[c,]<-data[i,cols]
+    c = c+1
+  }}
+names(m_compo)<-cols
+#head(m_compo)
+
+##################################################
+##               MATRICE  GOE                   ##
+row_m_goe<-0
+for (i in 1:nrow(data)){
+  if (data[i,"Elements"]!="Composition" & data[i,"Elements"]!="" & data[i,"Elements"]!="Presentation" & data[i,"Elements"]!="Skating Skills"){
+    row_m_goe<-row_m_goe+1    
+  }
+}
+row_m_goe<-row_m_goe
+#row_m_goe
+m_goe<-matrix(0,nrow=row_m_goe,(len_juge+3))#parce que je veux les skater et la base value
+m_goe<-as.data.frame(m_goe)
+
+cols_goe<-c("base_value","J1", "J2", "J3", "J4", "J5","JRef","Moyenne","Player_ID")
+
+b=1
+nb_col<-(len_juge+2)
+for (i in 1:nrow(data)){
+  if (data[i,"Elements"]!="Composition" &  data[i,"Elements"]!="" & data[i,"Elements"]!="Presentation" & data[i,"Elements"]!="Skating Skills"){
+    m_goe[b,]<-data[i,cols_goe]
+    b<-b+1
+  }}
+names(m_goe)<-cols_goe
+#head(m_goe)
+
+
+
+##################################################
+##        MATRICE CALCUL COMPO                  ##
+##################################################
+###########CONSTRUCTION LISTE DES SKATERS#########
+skat <- list()
+
+for (a in 1:nrow(m_compo)) {
+  if (!(m_compo$Player_ID[a] %in% skat)) {
+    skat <- append(skat, m_compo$Player_ID[a])
+  }
+}
+skat<-as.vector(skat)
+#skat
+
+c_compo<-matrix(0,nrow=(ncol(m_compo)/3),ncol=len_juge+1)
+c_compo<-as.data.frame(c_compo)
+
+indice <- which(cols %in% c("GEO...FACTOR", "Moyenne","Elements"))
+cols_c_compo <- cols[-indice]
+
+names(c_compo)<-cols_c_compo 
+#c_compo
+
+
+# Boucle sur chaque Player_ID dans skat
+for (c in 1:length(skat)) {
+  player_id <- skat[c]
+  
+  # Sélectionner les lignes correspondant au Player_ID dans m_compo
+  player_rows <- m_compo$Player_ID == player_id
+  player_data <- m_compo[player_rows, ]
+  
+  # Calculer le produit scalaire pour chaque juge
+  for (i in 1:length(juge)) {
+    juge_col <- juge[i]
+    produit_scalaire <- sum(player_data$GEO...FACTOR * as.numeric(player_data[[juge_col]]))
+    
+    # Stocker le résultat dans le dataframe c_compo
+    c_compo[c, juge_col] <- produit_scalaire
+  }
+}
+c_compo$Player_ID<-skat
+#c_compo
+
+##################################################
+##            MATRICE CALCUL GOE                ##
+##################################################
+skat <- list()
+
+for (a in 1:nrow(m_goe)) {
+  if (!(m_goe$Player_ID[a] %in% skat)) {
+    skat <- append(skat, m_goe$Player_ID[a])
+  }
+}
+skat<-as.vector(skat)
+#skat
+
+c_goe<-matrix(0,nrow=(ncol(m_goe)/3),ncol=len_juge+1)
+c_goe<-as.data.frame(c_goe)
+#c_goe
+
+indice <- which(cols_goe %in% c("base_value","Moyenne"))
+cols_c_goe <- cols_goe[-indice]
+
+names(c_goe)<-cols_c_goe
+#c_goe
+# Boucle sur chaque Player_ID dans skat
+for (c in 1:length(skat)) {
+  player_id <- skat[c]
+  
+  # Sélectionner les lignes correspondant au Player_ID dans m_compo
+  player_rows <- m_goe$Player_ID == player_id
+  player_data <- m_goe[player_rows, ]
+  
+  # Calculer le goe pour chaque juge
+  for (i in 1:length(juge)) {
+    juge_col <- juge[i]
+    calcul_goe <- sum(player_data$base_value * ((as.numeric(player_data[[juge_col]])/10)+1))
+    
+    # Stocker le résultat dans le dataframe c_goe
+    c_goe[c, juge_col] <- calcul_goe
+  }
+}
+c_goe$Player_ID<-skat
+#c_goe
+
+##################################################
+##        MATRICE CALCUL SCORE                  ##
+##################################################
+
+c_score<-matrix(0,nrow=nrow(c_goe),ncol=ncol(c_goe))
+c_score<-as.data.frame(c_score)
+names(c_score)<-names(c_goe)
+#c_score
+
+cols_score<-names(c_score)
+
+indice <- which(cols_score == "Player_ID")
+cols_c_score <- cols_score[-indice]
+#cols_c_score
+
+
+c_score[,cols_c_score]<-c_goe[,cols_c_score]+c_compo[,cols_c_score]
+c_score$Player_ID<-skat
+
+
+print(c_score,row.names = FALSE)
+
+
+```
+
+\
+Classement de la compétition associé aux noms des participants
+
+```{r}
+#| echo: false
+#| label : Scores Calculés + Ordre de score final par juge.
+
+
+##################################################
+##            MATRICES + PANEL                  ##
+##################################################
+
+###########goe_panel
+
+# Sélectionner les colonnes Player_ID et ScoreElem
+scoreElem <- data[, c("Player_ID", "ScoreElem")]
+
+# Supprimer les doublons pour avoir une seule ligne par joueur
+scoreElem <- unique(scoreElem)
+
+# Afficher les résultats
+#print(scoreElem)
+
+############compo_panel
+
+# Sélectionner les colonnes Player_ID et ScoreElem
+scoreCompo <- data[, c("Player_ID", "ScoreComp")]
+
+# Supprimer les doublons pour avoir une seule ligne par joueur
+scoreCompo <- unique(scoreCompo)
+
+# Afficher les résultats
+#print(scoreCompo)
+
+############score_panel
+
+# Sélectionner les colonnes Player_ID et ScoreElem
+scorePanel <- data[, c("Player_ID", "ScoreTotal")]
+
+# Supprimer les doublons pour avoir une seule ligne par joueur
+scorePanel <- unique(scorePanel)
+
+# Afficher les résultats
+print(scorePanel,row.names = FALSE)
+
+# Création de la matrice c_panel
+c_panel <- data.frame(
+  ScoreElem = scoreElem$ScoreElem,
+  ScoreComp = scoreCompo$ScoreComp,
+  ScoreTotal = scorePanel$ScoreTotal
+)
+#c_panel
+
+################################################################
+## 1/3 JEU DE DF FINAL POUR LES COL DE JUGE AVEC LIGNE SKATER ##
+################################################################
+
+c_compo$compo_panel<-c_panel$ScoreComp
+#c_compo
+
+c_compo <- c_compo[,c("Player_ID",juge,"compo_panel", names(c_compo)[!names(c_compo) %in% c(juge,"Player_ID","compo_panel")])]
+#c_compo
+
+
+c_goe$goe_panel<-c_panel$ScoreElem
+#c_goe
+
+c_goe <- c_goe[,c("Player_ID",juge,"goe_panel", names(c_goe)[!names(c_goe) %in% c(juge,"Player_ID","goe_panel")])]
+#c_goe
+
+c_score$score_panel<-c_panel$ScoreTotal
+#c_score
+
+c_score <- c_score[,c("Player_ID",juge,"score_panel", names(c_score)[!names(c_score) %in% c(juge,"Player_ID","score_panel")])]
+#c_score
+
+##################################################
+##        RECAP INFO CALCULE                    ##
+##################################################
+
+#score juge matrice avec note panel c_score
+#score compo juge matrice avec note panel c_compo
+#score goe juge matrice avec note panel c_goe 
+
+##################################################
+##    2/3        JEU DF CLASSEMENTS             ##
+##################################################
+
+clas<-data[,c("Rank","NomPren")]
+clas<-unique(clas)
+
+########################compo classement ############################
+
+
+col_clas_compo<-c(juge,"compo_panel")
+clasmt_c<-matrix(0,nrow=length(c_compo$Player_ID),ncol=length(col_clas_compo))
+clasmt_c<-as.data.frame(clasmt_c)
+names(clasmt_c)<-col_clas_compo
+#clasmt_c
+
+for (i in 1:length(col_clas_compo)){
+  rang<-rank(-c_compo[col_clas_compo[i]])
+  v<-clas$Rank[order(rang)]
+  for (a in 1:length(clas$Rank)){
+    clasmt_c[a,col_clas_compo[i]]<-v[a]}}
+
+#clasmt_c
+
+########################goe classement ############################
+
+col_clas_goe<-c(juge,"goe_panel")
+clasmt_g<-matrix(0,nrow=length(c_goe$Rank),ncol=length(col_clas_goe))
+clasmt_g<-as.data.frame(clasmt_g)
+names(clasmt_g)<-col_clas_goe
+#clasmt_g
+
+for (i in 1:length(col_clas_goe)){
+  rang<-rank(-c_goe[col_clas_goe[i]])
+  v<-clas$Rank[order(rang)]
+  for (a in 1:length(clas$Rank)){
+    clasmt_g[a,col_clas_goe[i]]<-v[a]}}
+
+#clasmt_g
+
+
+###################score classement#################################
+c_score$Moyenne <- 0
+for (i in 1:nrow(c_score)){
+  
+  c_score$Moyenne[i] <- sum(as.numeric(c_score[i,startsWith(names(c_score),"J")]))/length(juge)
+}
+
+col_clas_score<-c(juge,"Moyenne")
+clasmt_s<-matrix(0,nrow=length(c_score$Player_ID),ncol=length(col_clas_score)+1)
+clasmt_s<-as.data.frame(clasmt_s)
+names(clasmt_s)<-c(col_clas_score,"Score_panel")
+#clasmt_s
+
+for (i in 1:length(col_clas_score)){
+  rang<-rank(-c_score[col_clas_score[i]])
+  v<-clas$Rank[order(rang)]
+  for (a in 1:length(clas$Rank)){
+    clasmt_s[a,col_clas_score[i]]<-v[a]}}
+
+```
+
+Ordre de classement pour chaque juge en par rapport au rang final de la compétition.
+
+```{r}
+#| echo: false
+#| warning: false
+
+
+
+crois<-c_compo[-1]
+var<-c(juge,"compo_panel")
+
+data_long <- tidyr::gather(crois, key = "var", value = "Note")
+
+
+
+# Renommer la colonne compo_panel en note_panel
+data_long$var[data_long$var == "compo_panel"] <- "Notes panel"
+
+# Créer le graphique de violon
+Etendue_Compo <-  ggplot(data_long, aes(x = var, y = Note, fill = var)) +
+    geom_boxplot() +
+    scale_fill_manual(values = c(rep("white", 7), "white"), 
+                      name = "Groupes", 
+                      labels = c(juge, "Notes panel")) +
+    facet_wrap(~var, scales = "free", ncol = 4) +
+    labs(x = "Étendue des notes de composition", y = "Note", fill = NULL) +
+    theme(legend.position = "bottom")#+theme_classic()
+
+```
+
+```{r}
+#| echo: false
+#| label : Ajout des figures
+
+
+
+ #####################################################################
+#head(data)
+# Créer une nouvelle colonne appelée "figures" et initialiser avec NA
+data$figures <- NA
+
+# Remplacer les valeurs selon les conditions spécifiées dans la question
+data$figures[grep("^\\d", data$Elements)] <- "Saut"
+data$figures[grep("^StSq", data$Elements)] <- "StSq"
+data$figures[grep("^ChSq", data$Elements)] <- "ChSq"
+
+# Parcourir les éléments restants et les remplacer par "Pirouette"
+for (i in 1:nrow(data)) {
+  if (data$Elements[i]!="Composition" & data$Elements[i]!="Presentation" & data$Elements[i]!="Skating Skills" & is.na(data$figures[i])) {
+    data$figures[i] <- "Pirouette"
+  }
+}
+
+
+##################################################
+##               MATRICE  FIG GOE             ##
+##################################################
+r<-0
+for (i in 1:nrow(data)){
+  if (data[i,"Elements"]!="Composition" & data[i,"Elements"]!="" & data[i,"Elements"]!="Presentation" & data[i,"Elements"]!="Skating Skills"){
+    r<-r+1    
+  }
+}
+r<-r
+#r
+fig_goe<-matrix(0,nrow=r,(len_juge+4))#parce que je veux les skater et la base value
+fig_goe<-as.data.frame(fig_goe)
+cols_goe<-c("figures","base_value",juge,"Score_panel","Moyenne")
+b=1
+nb_col<-(len_juge+3)
+for (i in 1:nrow(data)){
+  if (data[i,"Elements"]!="Composition" & !is.na(data[i,"base_value"]) &data[i,"Numéro"]!="Total"& data[i,"Elements"]!="" & data[i,"Elements"]!="Presentation" & data[i,"Elements"]!="Skating Skills"){
+    fig_goe[b,]<-data[i,cols_goe]
+    b<-b+1
+  }}
+names(fig_goe)<-cols_goe
+#head(fig_goe)
+#fig_goe
+
+
+fig_goe <- fig_goe[order(fig_goe$figures),]
+
+
+################################################################
+##      MATRICE CALCUL GOE PAR JUGE POUR CHAQUE FIG           ##
+################################################################
+
+```
+
+```{r}
+#| include: true
+#| echo: false
+
+
+#fig_c<-matrix(0,nrow=nrow(fig_goe),ncol=ncol(fig_goe))
+#fig_c<-as.data.frame(fig_c)
+#names(fig_c)<-cols_goe
+
+#for (a in 1:nrow(fig_goe)){
+#  for (b in 1:length(juge)){
+#  fig_c[a,juge[b]]<-((as.numeric(fig_goe[a,juge[b]])/10)+1)*fig_goe$Moyenne[a]
+  
+#  }
+#}
+
+
+#fig_goe$mean_goe<-(fig_goe$Score_panel/fig_goe$base_value-1)*10
+#fig_goe$mean_goe[which(is.na(fig_goe$mean_goe))]<-0
+
+#View(fig_goe)
+#gérer nan 
+#head(fig_c)
+
+#head(fig_goe)
+#fig_c[,c("figures","base_value","Score_panel")]<-fig_goe[,c("figures","base_value"#,"Score_panel")]
+
+
+#fig_c
+
+
+
+```
+
+```{r}
+#| echo: false
+#| label : Biais
+
+
+
+
+
+
+
+
+###############################################################
+##              matrice pour note compo pour skill           ##
+###############################################################
+
+row_m_compo<-0
+for (i in 1:nrow(data)){
+  if (data[i,"Elements"]=="Composition" | data[i,"Elements"]=="Presentation" | data[i,"Elements"]=="Skating Skills"){
+    row_m_compo<-row_m_compo+1    
+  }
+}
+row_m_compo<-row_m_compo
+#row_m_compo
+m_compo<-matrix(0,nrow=row_m_compo,(len_juge+3))#parce que je veux les skater et le geo factor en plus
+m_compo<-as.data.frame(m_compo)
+cols<-c("Elements","GEO...FACTOR",juge,"Score_panel")
+c=1
+nb_col<-(len_juge+3)
+for (i in 1:nrow(data)){
+  if (data[i,"Elements"]=="Composition" | data[i,"Elements"]=="Presentation" | data[i,"Elements"]=="Skating Skills"){
+    m_compo[c,]<-data[i,cols]
+    c<-c+1
+  }}
+names(m_compo)<-cols
+#head(m_compo)
+
+elem_c<-matrix(0,nrow = nrow(m_compo),ncol=ncol(m_compo))
+elem_c<-as.data.frame(elem_c)
+names(elem_c)<-names(m_compo)
+
+#head(elem_c)
+elem_c[,c("Elements","GEO...FACTOR")]<-m_compo[,c("Elements","GEO...FACTOR")]
+#elem_c
+col_elem<-c(juge,"Score_panel")
+
+for (a in 1:nrow(elem_c)){
+  for (b in 1:length(col_elem)){
+    elem_c[a,col_elem[b]]<-as.numeric(m_compo[a,col_elem[b]])
+  }
+}
+#elem_c
+
+tab_clasmtGen <- matrix(0,nrow = nrow(c_score), ncol = ncol(c_score)-2)
+tab_clasmtGen <- as.data.frame(tab_clasmtGen)
+c_score_trimmed <- c_score[, -c(length(c_score) - 1, length(c_score))]
+
+# Assigner les noms des colonnes à tab_clasmtGen
+names(tab_clasmtGen) <- names(c_score_trimmed)
+
+# Copier les valeurs de la première colonne de c_score dans la première colonne de tab_clasmtGen
+for ( i in 1:nrow(c_score_trimmed)){
+  tab_clasmtGen[i,1] <- c_score_trimmed[i,1]
+}
+
+rank_desc <- function(x) {
+  rank(-x)
+}
+
+
+# Copier les valeurs numériques de c_score dans tab_clasmtGen
+for (i in 1:nrow(tab_clasmtGen)){
+  for (b in 2:length(tab_clasmtGen)){
+    tab_clasmtGen[i,b] <- c_score_trimmed[i, b]
+  }
+}
+for ( i in 2:length(tab_clasmtGen)){
+  tab_clasmtGen[,i] <- rank_desc(c_score_trimmed[,i])
+  tab_clasmtGen[,i] <- round(tab_clasmtGen[,i],0)
+}
+
+print(tab_clasmtGen,row.names = FALSE)
+
+
+```
+
+```{r}
+#| echo: false
+
+tab_clasmtGOE <- matrix(0,nrow = nrow(c_goe), ncol = ncol(c_goe)-1)
+tab_clasmtGOE <- as.data.frame(tab_clasmtGOE)
+c_goe_trimmed <- c_goe[, -c( length(c_goe))]
+
+# Assigner les noms des colonnes à tab_clasmtGen
+names(tab_clasmtGOE) <- names(c_score_trimmed)
+
+# Copier les valeurs de la première colonne de c_score dans la première colonne de tab_clasmtGen
+for ( i in 1:nrow(c_goe_trimmed)){
+  tab_clasmtGOE[i,1] <- c_goe_trimmed[i,1]
+}
+
+rank_desc <- function(x) {
+  rank(-x)
+}
+
+
+# Copier les valeurs numériques de c_score dans tab_clasmtGen
+for (i in 1:nrow(tab_clasmtGOE)){
+  for (b in 2:length(tab_clasmtGOE)){
+    tab_clasmtGOE[i,b] <- c_goe_trimmed[i, b]
+  }
+}
+for ( i in 2:length(tab_clasmtGOE)){
+  tab_clasmtGOE[,i] <- rank_desc(c_goe_trimmed[,i])
+}
+
+print(tab_clasmtGOE,row.names = FALSE)
+```
+
+```{r}
+#| echo: false
+
+tab_clasmtcompo <- matrix(0,nrow = nrow(c_compo), ncol = ncol(c_compo)-1)
+tab_clasmtcompo <- as.data.frame(tab_clasmtcompo)
+c_compo_trimmed <- c_compo[, -c( length(c_compo))]
+
+# Assigner les noms des colonnes à tab_clasmtGen
+names(tab_clasmtcompo) <- names(c_compo_trimmed)
+
+# Copier les valeurs de la première colonne de c_score dans la première colonne de tab_clasmtGen
+for ( i in 1:nrow(c_compo_trimmed)){
+  tab_clasmtcompo[i,1] <- c_compo_trimmed[i,1]
+}
+
+rank_desc <- function(x) {
+  rank(-x)
+}
+
+
+# Copier les valeurs numériques de c_score dans tab_clasmtGen
+for (i in 1:nrow(tab_clasmtcompo)){
+  for (b in 2:length(tab_clasmtcompo)){
+    tab_clasmtcompo[i,b] <- c_compo_trimmed[i, b]
+  }
+}
+for ( i in 2:length(tab_clasmtcompo)){
+  tab_clasmtcompo[,i] <- rank_desc(c_compo_trimmed[,i])
+  tab_clasmtcompo[,i] <- round(tab_clasmtcompo[,i],0)
+}
+
+print(tab_clasmtcompo,row.names = FALSE)
+```
+
+Etendue des notes utilisées par les juges.
+
+```{r}
+#| echo: false
+#| warning: false
+#| 
+Etendue_Compo + theme_classic() #meh
+```
+
+"ETUDE DES BIAIS DANS LES NOTATION DES JUGES : Ecarts à la moyenne du panel , variance et tests statistiques d'ecarts à la moyenne pour évaluer la significativité de nos observations graphiques.
+
+Pour les tests statistiques, nous effecturons des test sur 10 plages de données type, à moduler en fonction du nombre de juges. Ainsi la valeur seuil de significativité d'un test, ne sera plus de 0.05 mais de 0.05 / ( 10 \* nombre de juge) pour nos multiples tests.
+
+```{r}
+#| echo: false
+#| 
+pvaluedutest <-round(0.05 /(length(juge)*10),8)
+
+print(paste("Ainsi dans la présente analyse la p valeur seuil pour l'ensemble de nos tests sera de", pvaluedutest))
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+
+
+#c_score
+score_cb<-matrix(0,nrow=nrow(c_score),ncol=ncol(c_score)-2)
+score_cb<-as.data.frame(score_cb)
+names(score_cb)<-col_clas_score
+score_cb$score_panel<-0
+
+
+for (a in 1:nrow(c_score)){
+  for (b in 1:length(juge)){
+    score_cb[a,juge[b]]<-round((as.numeric(c_score[a,juge[b]])-c_score$Moyenne[a]),digits = 6)
+    
+  }
+}
+#score_cb
+
+var<-c(juge)
+
+data_long <- tidyr::gather(score_cb, key = "var", value = "Note",-c(score_panel,Moyenne))
+
+
+
+
+
+# Renommer la colonne compo_panel en note_panel
+
+# Créer le graphique de violon
+NL1_Score <- ggplot(data_long, aes(x = var, y = Note, fill = var)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c(rep("white", 7)), 
+                    name = "Groupes", 
+                    labels = c(juge)) +
+ ylim(min(score_cb),max(score_cb)) +geom_hline(yintercept = 0,linetype = "dashed",linewidth=0.75, color = "green4")+
+  labs(x = "juge",title = "Biais dans la notation à l'echelle du score total", y = "Note", fill = NULL) +
+  theme(legend.position = "bottom")+theme_classic()
+
+NL1_Score
+
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+#c_score
+score_cb2<-matrix(0,nrow=nrow(c_score),ncol=ncol(c_score)-2)
+score_cb2<-as.data.frame(score_cb2)
+names(score_cb2)<-col_clas_score
+score_cb2$score_panel<-0
+
+
+for (a in 1:nrow(c_score)){
+  for (b in 1:length(juge)){
+    score_cb2[a,juge[b]]<-round((as.numeric(c_score[a,juge[b]])-c_score$Moyenne[a])^2, digits = 6 )
+    
+  }
+}
+#score_cb2
+
+var<-c(juge)
+
+data_long <- tidyr::gather(score_cb2, key = "var", value = "Note",-c(score_panel,Moyenne))
+
+
+
+# Renommer la colonne compo_panel en note_panel
+
+# Créer le graphique de violon
+NL2_Score <-ggplot(data_long, aes(x = var, y = Note, fill = var)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c(rep("white", 7)), 
+                    name = "Groupes", 
+                    labels = c(juge)) +
+ ylim(0,max(score_cb)^2) +geom_hline(yintercept = 0)+
+  labs(x = "juge",title = "Déviation systématique dans la notation à l'echelle du score total", y = "Note", fill = NULL) +
+  theme(legend.position = "bottom")+theme_classic()
+
+NL2_Score
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+###################################################################
+##             MATRICE BIAIS + graph
+###################################################################
+
+fig_cb<-matrix(0,nrow=nrow(fig_goe),ncol=ncol(fig_goe))
+fig_cb<-as.data.frame(fig_cb)
+names(fig_cb)<-cols_goe
+fig_cb[,c("figures","base_value")]<-fig_goe[,c("figures","base_value")]
+
+
+for (a in 1:nrow(fig_goe)){
+  for (b in 1:length(juge)){
+    fig_cb[a,juge[b]]<-round((as.numeric(fig_goe[a,juge[b]]))-fig_goe$Moyenne[a],digits = 6)
+    
+  }
+}
+#head(fig_goe)
+#head(fig_cb)
+
+# Conversion des données en format long pour ggplot2
+fig_cb_graph <- fig_cb[, c("base_value", juge, "figures")]
+donnees_long1 <- tidyr::pivot_longer(fig_cb_graph, -c(figures, base_value))
+
+p1 <- ggplot(donnees_long1, aes(x = c(figures), y = value, fill = figures)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("white", "white", "white","white")) +
+  facet_wrap(~ name, scales = "free_y") +
+  labs(x = "Figure", y = "Valeur", title = "Biais dans la notation à l'echelle du GOE") +
+  theme_classic() +
+  # ylim(-2, 2) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1)) +
+  geom_hline(yintercept = 0, linewidth = 0.75, linetype = "dashed", color = "magenta")+geom_hline(yintercept = 2,linetype = "dashed",linewidth=0.75, color = "red2")+geom_hline(yintercept = -2,linetype = "dashed",linewidth=0.75, color = "red2")
+
+# Enregistrement du graphique avec une taille spécifiée
+
+NL1_GOE <- p1
+#NL1_GOE
+
+```
+
+```{r}
+#| echo: false
+
+liste_graphiques <- list()
+
+count_values <- function(data) {
+  # Création d'une table de comptage vide
+  table_counts <- data.frame(Figure = unique(data$figures),
+                              Count_outside_range = rep(0, length(unique(data$figures))))
+  
+  # Boucle sur chaque type de figure
+  for (i in 1:nrow(table_counts)) {
+    figure <- table_counts$Figure[i]
+    count_outside_range <- sum(data$value[data$figures == figure] < -2 | data$value[data$figures == figure] > 2)
+    table_counts$Count_outside_range[i] <- count_outside_range
+  }
+  
+  # Ajouter une ligne avec la somme des figures
+  total_counts <- sum(table_counts$Count_outside_range)
+  table_counts <- rbind(table_counts, c("Total", total_counts))
+  
+  return(table_counts)
+}
+# Création d'une liste pour stocker les tableaux pour chaque juge
+liste_tableaux <- list()
+
+# Boucle sur chaque juge pour créer le tableau correspondant
+for (i in juge){
+    # Filtrer les données pour le juge actuel
+    juge_data <- donnees_long1[donnees_long1$name == i, ]
+    
+    # Calculer les comptages pour ce juge
+    table_data <- count_values(juge_data)
+    
+    # Changer le nom du tableau en fonction du juge
+    nom_tableau <- paste("tableau_", i, sep = "")
+    names(table_data) <- c( paste("Tableau d'effectif des valeurs hors de [-2;2] pour", i, sep = ""), " ")
+    
+    # Ajouter le tableau à la liste des tableaux
+    liste_tableaux[[nom_tableau]] <- table_data
+}
+# Boucle sur chaque juge pour créer les graphiques individuels et les tableaux
+for (i in juge) {
+  # Filtrer les données pour le juge actuel
+  juge_data <- donnees_long1[donnees_long1$name == i, ]
+  
+  # Créer un tableau avec le nombre de valeurs supérieures à 2 et inférieures à -2
+
+  
+  # Créer un graphique pour le juge actuel
+  graph <- ggplot(juge_data, aes(x = "Toutes les figures", y = value)) +
+    geom_boxplot() +
+    geom_boxplot(aes(x = figures, y = value), fill = "gray", color = "black", alpha = 0.5) +
+    labs(title = paste("Graphique des biais pour les figures techniques de", i), x = "Figures", y = "Note") +
+    theme_classic() +
+    geom_hline(yintercept = 2, linetype = "dashed", linewidth = 0.75, color = "red2") +
+    geom_hline(yintercept = -2, linetype = "dashed", linewidth = 0.75, color = "red2") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    geom_hline(yintercept = 0, linewidth = 0.75, linetype = "dashed", color = "magenta")
+  
+  # Ajouter le graphique à la liste des graphiques
+  liste_graphiques[[i]] <- graph
+}
+
+# Afficher les graphiques
+for (i in seq_along(liste_graphiques)) {
+  print(liste_graphiques[[i]])
+  
+  # Afficher le tableau correspondant
+  print(liste_tableaux[[i]])
+}
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+
+
+
+
+
+
+fig_cb_transposed <- pivot_longer(fig_cb, cols = -c(figures, base_value, Score_panel,Moyenne), names_to = "Juge", values_to = "Biais")
+
+# Créer un graphique pour chaque type de critère (Composition, Skating Skills, Présentation)
+plot_saut_NL1 <- ggplot(subset(fig_cb_transposed, figures == "Saut"), aes(x = Juge, y = Biais, fill = figures)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "orange")+geom_hline(yintercept = 2,linetype = "dashed",linewidth=0.75, color = "red2")+geom_hline(yintercept = -2,linetype = "dashed",linewidth=0.75, color = "red2") +
+  labs(x = NULL, y = "Biais des lignes composition", title = "Biais des lignes Composition") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14))+theme_classic()+
+  ggtitle("Biais dans la notation à l'echelle du score de la figure Saut")+ scale_fill_manual(values = "white")
+
+if(nrow(subset(fig_cb_transposed, figures == "Saut")>= len_juge)){
+plot_saut_NL1
+
+}
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+Saut_data <- subset(fig_cb, figures == "Saut")
+
+if (nrow(subset(fig_cb, figures == "Saut")) >= len_juge) {
+  
+  juges <- names(Saut_data)[startsWith(names(Saut_data), "J")]
+  
+  for (j in juges) {
+    # Exécuter le test t pour chaque paire de variables correspondantes
+    resultat_test <- t.test(Saut_data[[j]], Saut_data$Moyenne, paired = TRUE)
+   
+    if (resultat_test$p.value < pvaluedutest) { 
+      print(paste("La P-value du t-test pour", j, "=", round(resultat_test$p.value, digits = 8), ".")) 
+    }
+  }  
+  
+}
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+
+plot_ChSq_NL1 <- ggplot(subset(fig_cb_transposed, figures == "ChSq"), aes(x = Juge, y = Biais, fill = figures)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "orange")+geom_hline(yintercept = 2,linetype = "dashed",linewidth=0.75, color = "red2")+geom_hline(yintercept = -2,linetype = "dashed",linewidth=0.75, color = "red2") +
+  labs(x = NULL, y = "Biais des lignes composition", title = "Biais des lignes Composition") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14))+theme_classic()+
+  ggtitle("Biais dans la notation à l'echelle du score de la Figure ChSq")+ scale_fill_manual(values = "white")
+
+if(nrow(subset(fig_cb_transposed, figures == "ChSq")>= len_juge)){
+plot_ChSq_NL1
+
+}
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+
+ChSq_data <- subset(fig_cb, figures == "ChSq")
+
+if (nrow(subset(fig_cb, figures == "ChSq")) >= len_juge) {
+  
+  juges <- names(ChSq_data)[startsWith(names(ChSq_data), "J")]
+  
+  for (j in juges) {
+    # Exécuter le test t pour chaque paire de variables correspondantes
+    resultat_test <- t.test(ChSq_data[[j]], ChSq_data$Moyenne, paired = TRUE)
+  
+    if (resultat_test$p.value < pvaluedutest) { 
+      print(paste("La P-value du t-test pour", j, "=", round(resultat_test$p.value, digits = 8), ".")) 
+    }
+  }  
+  
+}
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+plot_Pirouette_NL1 <- ggplot(subset(fig_cb_transposed, figures == "Pirouette"), aes(x = Juge, y = Biais, fill = figures)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "orange")+geom_hline(yintercept = 2,linetype = "dashed",linewidth=0.75, color = "red2")+geom_hline(yintercept = -2,linetype = "dashed",linewidth=0.75, color = "red2") +
+  labs(x = NULL, y = "Biais des lignes composition", title = "Biais des lignes Composition") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14))+theme_classic()+
+  ggtitle("Biais dans la notation à l'echelle du score de la figure Pirouette")+ scale_fill_manual(values = "white")
+
+if(nrow(subset(fig_cb_transposed, figures == "Pirouette")>= len_juge)){
+plot_Pirouette_NL1
+
+}
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+Pirouette_data <- subset(fig_cb, figures == "Pirouette")
+
+if (nrow(subset(fig_cb, figures == "Pirouette")) >= len_juge) {
+  
+  juges <- names(Pirouette_data)[startsWith(names(Pirouette_data), "J")]
+  
+  for (j in juges) {
+    # Exécuter le test t pour chaque paire de variables correspondantes
+    resultat_test <- t.test(Pirouette_data[[j]], Pirouette_data$Moyenne, paired = TRUE)
+  
+    if (resultat_test$p.value < pvaluedutest) { 
+      print(paste("La P-value du t-test pour", j, "=", round(resultat_test$p.value, digits = 8), ".")) 
+    }
+  }  
+  
+}
+```
+
+```{r}
+#| echo: false
+#| warning: false
+plot_StSq_NL1 <- ggplot(subset(fig_cb_transposed, figures == "StSq"), aes(x = Juge, y = Biais, fill = figures)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "orange")+geom_hline(yintercept = 2,linetype = "dashed",linewidth=0.75, color = "red2")+geom_hline(yintercept = -2,linetype = "dashed",linewidth=0.75, color = "red2") +
+  labs(x = NULL, y = "Biais des lignes composition", title = "Biais des lignes Composition") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14))+theme_classic()+
+  ggtitle("Biais dans la notation à l'echelle du score de la figure Stsq")+ scale_fill_manual(values = "white")
+if(nrow(subset(fig_cb_transposed, figures == "StSq")>= len_juge)){
+plot_StSq_NL1
+}
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+
+StSq_data <- subset(fig_cb, figures == "StSq")
+
+if (nrow(subset(fig_cb, figures == "StSq")) >= len_juge) {
+  
+  juges <- names(StSq_data)[startsWith(names(StSq_data), "J")]
+  
+  for (j in juges) {
+    # Exécuter le test t pour chaque paire de variables correspondantes
+    resultat_test <- t.test(StSq_data[[j]], StSq_data$Moyenne, paired = TRUE)
+  
+    if (resultat_test$p.value < pvaluedutest) { 
+      print(paste("La P-value du t-test pour", j, "=", round(resultat_test$p.value, digits = 8), ".")) 
+    }
+  }  
+  
+}
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| 
+####################################################################
+##        MATRICE BIAIS AU CARRE
+####################################################################
+
+
+fig_cb2<-matrix(0,nrow=nrow(fig_goe),ncol=ncol(fig_goe))
+fig_cb2<-as.data.frame(fig_cb2)
+names(fig_cb2)<-cols_goe
+fig_cb2[,c("figures","base_value")]<-fig_goe[,c("figures","base_value")]
+
+
+for (a in 1:nrow(fig_goe)){
+  for (b in 1:length(juge)){
+    fig_cb2[a,juge[b]]<-round(((as.numeric(fig_goe[a,juge[b]]))-fig_goe$Moyenne[a])^2, digits = 4)
+    
+  }
+}
+
+#head(fig_cb2)
+
+# Conversion des données en format long pour ggplot2
+fig_cb2_graph<-fig_cb2[,c("base_value",juge,"figures")]
+donnees_long <- tidyr::pivot_longer(fig_cb2_graph, -c(figures, base_value))
+#donnees_long
+# Création du boxplot avec ggplot2
+p2<-ggplot(donnees_long, aes(x = figures, y = value, fill = figures)) +
+  geom_boxplot()  +ylim(0,2)+scale_fill_manual(values=c("white","white","white","white"))+
+  facet_wrap(~ name, scales = "free_y") + geom_hline(yintercept = 0, linewidth=0.75)+
+  labs(x = "Figure", y = "Valeur", title = "Déviation systématique dans la notation à l'echelle du score de GOE")
+p2<-p2 + theme_classic()
+NL2_GOE <- p2+theme(axis.text.x = element_text(angle = 90, vjust = 1))
+
+#NL2_GOE
+```
+
+```{r}
+#| echo: false
+
+for (i in juge) {
+  # Filtrer les données pour le juge actuel
+  juge_data <- donnees_long[donnees_long$name == i, ]
+  
+  # Créer un tableau avec le nombre de valeurs supérieures à 2 et inférieures à -2
+
+  
+  # Créer un graphique pour le juge actuel
+  graph <- ggplot(juge_data, aes(x = "Toutes les figures", y = value)) +
+    geom_boxplot() +
+    geom_boxplot(aes(x = figures, y = value), fill = "gray", color = "black", alpha = 0.5) +
+    labs(title = paste("Graphique du Mean Squared Error des figures pour", i), x = "figures", y = "Note") +
+    theme_classic() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    geom_hline(yintercept = 0, linewidth = 0.75, linetype = "dashed", color = "magenta")
+  
+  # Ajouter le graphique à la liste des graphiques
+  liste_graphiques[[i]] <- graph
+}
+
+# Afficher les graphiques
+for (i in seq_along(liste_graphiques)) {
+  print(liste_graphiques[[i]])
+  
+}
+```
+
+```{r}
+#| echo: false
+ #| warning: false
+p2<-ggplot(subset(donnees_long,figures == "StSq"), aes(x = name , y = value , fill = figures)) +
+  geom_boxplot()  +ylim(0,2)+scale_fill_manual(values="white")+
+   geom_hline(yintercept = 0, linewidth=0.75)+
+  labs(x = "Figure", y = "Valeur", title = "Déviation systématique dans la notation à l'echelle du score de la figure StSQ")
+p2<-p2 + theme_classic()
+NL2_StSq <- p2+theme(axis.text.x = element_text(angle = 90, vjust = 1))
+
+if (nrow(subset(donnees_long,figures == "StSq")) >= len_juge){
+NL2_StSq
+
+}
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| 
+p2<-ggplot(subset(donnees_long,figures == "Pirouette"), aes(x = name , y = value , fill = figures)) +
+  geom_boxplot()  +ylim(0,2)+scale_fill_manual(values="white")+
+   geom_hline(yintercept = 0, linewidth=0.75)+
+  labs(x = "Figure", y = "Valeur", title = "Déviation systématique dans la notation à l'echelle du score de la figure Pirouette")
+p2<-p2 + theme_classic()
+NL2_Pirouette <- p2+theme(axis.text.x = element_text(angle = 90, vjust = 1))
+
+if (nrow(subset(donnees_long,figures == "Pirouette")) >= len_juge){
+NL2_Pirouette
+
+}
+```
+
+```{r}
+#| echo: false
+#| warning: false
+p2<-ggplot(subset(donnees_long,figures == "Saut"), aes(x = name , y = value , fill = figures)) +
+  geom_boxplot()  +ylim(0,2)+scale_fill_manual(values="white")+
+   geom_hline(yintercept = 0, linewidth=0.75)+
+  labs(x = "Figure", y = "Valeur", title = "Déviation systématique dans la notation à l'echelle du score de la figure Saut")
+p2<-p2 + theme_classic()
+NL2_Saut <- p2+theme(axis.text.x = element_text(angle = 90, vjust = 1))
+
+if (nrow(subset(donnees_long,figures == "Saut")) >= len_juge){
+NL2_Saut
+
+}
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+p2<-ggplot(subset(donnees_long,figures == "ChSq"), aes(x = name , y = value , fill = figures)) +
+  geom_boxplot()  +ylim(0,2)+scale_fill_manual(values="white")+
+   geom_hline(yintercept = 0, linewidth=0.75)+
+  labs(x = "Figure", y = "Valeur", title = "Déviation systématique dans la notation à l'echelle du score de la figure ChSq")
+p2<-p2 + theme_classic()
+NL2_ChSq <- p2+theme(axis.text.x = element_text(angle = 90, vjust = 1))
+
+if (nrow(subset(donnees_long,figures == "ChSq")) >= len_juge){
+NL2_ChSq
+
+}
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+###############################################################################
+##                   BIAIS COMPO DETAIL                                      ##
+###############################################################################
+elem_c$Moyenne <- 0
+for (i in 1:nrow(elem_c)){
+  
+  elem_c$Moyenne[i] <- sum(as.numeric(elem_c[i,startsWith(names(elem_c),"J")]))/length(juge)
+}
+
+compo_cb<-matrix(0,nrow=nrow(elem_c),ncol=ncol(elem_c))
+compo_cb<-as.data.frame(compo_cb)
+names(compo_cb)<-names(elem_c)
+compo_cb[,c("Elements","GEO...FACTOR")]<-elem_c[,c("Elements","GEO...FACTOR")]
+#compo_cb
+
+for (a in 1:nrow(elem_c)){
+  for (b in 1:length(juge)){
+    compo_cb[a,juge[b]]<-as.numeric(elem_c[a,juge[b]])-elem_c$Moyenne[a]
+    
+  }
+}
+
+#head(compo_cb)
+
+
+# Conversion des données en format long pour ggplot2
+donnees_long5 <- tidyr::pivot_longer(compo_cb, -c(Elements, GEO...FACTOR, Score_panel,Moyenne))
+
+# Création du boxplot avec ggplot2
+NL1_COMPO <- ggplot(donnees_long5, aes(x = Elements, y = value, fill = Elements)) +
+  geom_boxplot() +scale_fill_manual(values=c("white","white","white"))+
+  facet_wrap(~ name, scales = "free_y") + geom_hline(yintercept = 0, linetype = "dashed", color = "blue3")+
+  labs(x = "Elements", y = "Valeur", title = "Biais dans la notation à l'echelle du score des Composentes")+theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+
+
+
+
+
+
+
+
+#NL1_COMPO+theme_classic()+theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+
+# Filtrer les données pour chaque type de critère
+composition_data <- subset(compo_cb, Elements == "Composition")
+skating_skills_data <- subset(compo_cb, Elements == "Skating Skills")
+presentation_data <- subset(compo_cb, Elements == "Presentation")
+
+compo_cb_transposed <- pivot_longer(compo_cb, cols = -c(Elements, GEO...FACTOR, Score_panel,Moyenne), names_to = "Juge", values_to = "Biais")
+
+```
+
+```{r}
+#| echo: false
+
+for (i in juge) {
+  # Filtrer les données pour le juge actuel
+  juge_data <- donnees_long5[donnees_long5$name == i, ]
+  
+  # Créer un tableau avec le nombre de valeurs supérieures à 2 et inférieures à -2
+
+  
+  # Créer un graphique pour le juge actuel
+  graph <- ggplot(juge_data, aes(x = "Toutes les figures", y = value)) +
+    geom_boxplot() +
+    geom_boxplot(aes(x = Elements, y = value), fill = "gray", color = "black", alpha = 0.5) +
+    labs(title = paste("Graphique des biais pour les élements de composition de ", i), x = "Figures", y = "Note") +
+    theme_classic() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    geom_hline(yintercept = 0, linewidth = 0.75, linetype = "dashed", color = "magenta")
+  
+  # Ajouter le graphique à la liste des graphiques
+  liste_graphiques[[i]] <- graph
+}
+
+# Afficher les graphiques
+for (i in seq_along(liste_graphiques)) {
+  print(liste_graphiques[[i]])
+  
+}
+```
+
+```{r}
+#| echo: false
+#| include: false
+
+print(paste0("Comme il y a ", len_juge, " Juges, nous procéderons à au moins ", (len_juge * 3), " tests statistiques pour les composantes."))
+print(paste0("Puisque nos test serons multiples il ets necessaire d'adapter le seuil de pvaleur, ainsi notre seuil sera alors de 0.05 / ",(len_juge*3),' = ',round((0.05/(len_juge*3)),digits = 6)))
+
+```
+
+Detail pour chaque une des Composentes.
+
+```{r}
+#| echo: false
+#| warning: false
+
+plot_presentation_NL1 <- ggplot(subset(compo_cb_transposed, Elements == "Presentation"), aes(x = Juge, y = Biais, fill = Elements)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue3") +
+  labs(x = NULL, y = "Biais des lignes présentation") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+        axis.text = element_text(face = "bold"))+theme_classic()+
+  ggtitle("Biais dans la notation à l'echelle du score de Presentation")+ scale_fill_manual(values="white")
+
+
+
+
+plot_presentation_NL1
+
+
+
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+
+#elem_c # matrice des compo
+
+
+
+#presentation_table <- subset(elem_c, Elements == "Presentation")
+
+
+juges <- names(subset(elem_c, Elements == "Presentation"))[startsWith(names(subset(elem_c, Elements == "Presentation")), "J")]
+
+for (j in juges) {
+    # Exécuter le test t pour chaque paire de variables correspondantes
+    resultat_test <- t.test(subset(elem_c, Elements == "Presentation")[[j]], subset(elem_c, Elements == "Presentation")$Moyenne, paired = TRUE)
+    if (resultat_test$p.value < pvaluedutest) { 
+        print(paste("La P-value du t-test pour", j, "=", round(resultat_test$p.value, digits = 10), ".")) 
+    }
+}
+
+
+#essaietestvar <- pairwise.t.test(composition_table$J2, composition_table$Score_panel,paired = TRUE)
+#print(composition_table$J2)
+#print(composition_table$Score_panel)
+
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+plot_skating_skills_NL1 <- ggplot(subset(compo_cb_transposed, Elements == "Skating Skills"), aes(x = Juge, y = Biais, fill = Elements)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue3") +
+  labs(x = NULL, y = "Biais des lignes skating skills", title = "Biais des lignes Skating Skills") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14))+theme_classic()+
+  ggtitle("Biais dans la notation à l'echelle du score de Composition")+ scale_fill_manual(values="white")
+
+
+plot_skating_skills_NL1
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+#skating_skills_table <- subset(elem_c, Elements == "Skating Skills")
+juges <- names(subset(elem_c, Elements == "Skating Skills"))[startsWith(names(subset(elem_c, Elements == "Skating Skills")), "J")]
+
+for (j in juges) {
+    # Exécuter le test t pour chaque paire de variables correspondantes
+    resultat_test <- t.test(subset(elem_c, Elements == "Skating Skills")[[j]], subset(elem_c, Elements == "Skating Skills")$Moyenne, paired = TRUE)
+    
+    if (resultat_test$p.value < pvaluedutest) { 
+        print(paste("La P-value du t-test pour", j, "=", round(resultat_test$p.value, digits = 8), ".")) 
+    }
+}
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+# Créer un graphique pour chaque type de critère (Composition, Skating Skills, Présentation)
+plot_composition_NL1 <- ggplot(subset(compo_cb_transposed, Elements == "Composition"), aes(x = Juge, y = Biais, fill = Elements)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue3") +
+  labs(x = NULL, y = "Biais des lignes composition", title = "Biais des lignes Composition") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14))+theme_classic()+
+  ggtitle("BBiais dans la notation à l'echelle du score de Composition")+ scale_fill_manual(values="white")
+
+
+plot_composition_NL1
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+
+#composition_table <- subset(elem_c, Elements == "Composition")
+juges <- names(subset(elem_c, Elements == "Composition"))[startsWith(names(subset(elem_c, Elements == "Composition")), "J")]
+
+for (j in juges) {
+    # Exécuter le test t pour chaque paire de variables correspondantes
+    resultat_test <- t.test(subset(elem_c, Elements == "Composition")[[j]], subset(elem_c, Elements == "Composition")$Moyenne, paired = TRUE)
+    if (resultat_test$p.value < pvaluedutest) { 
+        print(paste("La P-value du t-test pour", j, "=", round(resultat_test$p.value, digits = 8), ".")) 
+    }
+}
+```
+
+```{r}
+#| echo: false
+#| warning: false
+###############################################################################
+##                   BIAIS COMPO NL2                                      ##
+###############################################################################
+
+compo_cb2<-matrix(0,nrow=nrow(elem_c),ncol=ncol(elem_c))
+compo_cb2<-as.data.frame(compo_cb2)
+names(compo_cb2)<-names(elem_c)
+compo_cb2[,c("Elements","GEO...FACTOR")]<-elem_c[,c("Elements","GEO...FACTOR")]
+#compo_cb2
+
+#nrow(elem_c)
+
+for (a in 1:nrow(elem_c)){
+  for (b in 1:length(juge)){
+    compo_cb2[a,juge[b]]<-round((as.numeric(elem_c[a,juge[b]])-elem_c$Moyenne[a])^2,digits = 6)
+    
+  }
+}
+
+#head(compo_cb2)
+
+
+# Conversion des données en format long pour ggplot2
+donnees_long3 <- tidyr::pivot_longer(compo_cb2, -c(Elements, GEO...FACTOR, Score_panel,Moyenne))
+
+# Création du boxplot avec ggplot2
+p3<-ggplot(donnees_long3, aes(x = Elements, y = value, fill = Elements)) +
+  geom_boxplot()+scale_fill_manual(values=c("white","white","white"))+
+  facet_wrap(~ name, scales = "free_y") + geom_hline(yintercept = 0,linewidth=0.75 )+
+  labs(x = "Elements", y = "Valeur", title = "Déviation systématique dans la notation à l'echelle du score des Composentes")
+p3<-p3+theme_classic()
+#p3+theme(axis.text.x = element_text(angle = 90, vjust = 1))
+
+```
+
+```{r}
+#| echo: false
+
+
+for (i in juge) {
+  # Filtrer les données pour le juge actuel
+  juge_data <- donnees_long3[donnees_long3$name == i, ]
+  
+  # Créer un tableau avec le nombre de valeurs supérieures à 2 et inférieures à -2
+
+  
+  # Créer un graphique pour le juge actuel
+  graph <- ggplot(juge_data, aes(x = "Toutes les figures", y = value)) +
+    geom_boxplot() +
+    geom_boxplot(aes(x = Elements, y = value), fill = "gray", color = "black", alpha = 0.5) +
+    labs(title = paste("Graphique du MSE des élements de composition pour", i), x = "Figures", y = "Note") +
+    theme_classic() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    geom_hline(yintercept = 0, linewidth = 0.75, linetype = "dashed", color = "magenta")
+  
+  # Ajouter le graphique à la liste des graphiques
+  liste_graphiques[[i]] <- graph
+}
+
+# Afficher les graphiques
+for (i in seq_along(liste_graphiques)) {
+  print(liste_graphiques[[i]])
+  
+}
+```
+
+```{r}
+#| echo: false
+#| warning: false
+# Créer un graphique pour chaque type de critère (Composition, Skating Skills, Présentation)
+plot_composition_NL2 <- ggplot(subset(donnees_long3, Elements == "Composition"), aes(x = name, y = value, fill = Elements)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "magenta") +
+  labs(x = NULL, y = "Biais des lignes composition", title = "Biais des lignes Composition") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14))+theme_classic()+
+  ggtitle("Graphique du MSE des juges pour l'élements Composition") + scale_fill_manual(values = "white")
+
+plot_composition_NL2 
+```
+
+```{r}
+#| echo: false
+#| warning: false
+plot_Skating_Skills_NL2 <- ggplot(subset(donnees_long3, Elements == "Skating Skills"), aes(x = name, y = value, fill = Elements)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "magenta") +
+  labs(x = NULL, y = "Biais des lignes composition", title = "Biais des lignes Composition") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14))+theme_classic()+
+  ggtitle("Graphique du MSE des juges pour l'élements Skating Skills") +scale_fill_manual(values = "white")
+
+plot_Skating_Skills_NL2
+```
+
+```{r}
+#| echo: false
+#| warning: false
+#| 
+plot_presentation_NL2 <- ggplot(subset(donnees_long3, Elements == "Presentation"), aes(x = name, y = value, fill = Elements)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "magenta") +
+  labs(x = NULL, y = "Biais des lignes composition", title = "Biais des lignes Composition") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 14))+theme_classic()+
+  ggtitle("Graphique du MSE des juges pour l'élements Presentation")+scale_fill_manual(values = "white")
+
+plot_presentation_NL2
+```
+
+```{r}
+#| echo: false
+
+
+j_kendall<-rep(0,length(juge))
+names(j_kendall)<-juge
+for (j in juge){
+  conc <- 0
+  disc <- 0
+  for (i in 1:(length(skat)-1)) {
+    if (complete.cases(clasmt_s[i, ]) && complete.cases(clasmt_s[i+1, ]) && complete.cases(skat[i]) && complete.cases(skat[i+1])) {
+      if ((clasmt_s$Moyenne[i] > clasmt_s$Moyenne[i+1] && clasmt_s[i,j] > clasmt_s[i+1,j]) |
+          (clasmt_s$Moyenne[i] < clasmt_s$Moyenne[i+1] && clasmt_s[i,j] < clasmt_s[i+1,j])) {
+        conc <- conc + 1
+      } else {
+        disc <- disc + 1
+      }
+    }
+  }
+  tau_kendall <- (conc - disc) / (0.5 * length(skat) * (length(skat) - 1))
+  j_kendall[j] <- tau_kendall
+}
+j_kendall
+```
