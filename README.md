@@ -5,9 +5,9 @@ Pourquoi le projet est utile :
   Améliorer et q=guider les jugements + projet scolaire.
   
 Prise en main du projet par les utilisateurs :
-  Pour la partie PDF, il suffit de modifier le path du document.pdf source dans le code puis de l'éxécuter.
+  Pour la partie PDF, il suffit de modifier le path du document.pdf(l8) source dans le code puis de l'éxécuter. ( Possible de modifier le nom dans les dernieres lignes du document.py)
   Même chose pour R, injecte le document.csv et éxécute. C'est un quarto et donc fournira un PDF.
-  
+
 Où les utilisateurs peuvent obtenir de l’aide sur votre projet.
   alarig.vigneras@etu.u-bordeaux.fr
   
